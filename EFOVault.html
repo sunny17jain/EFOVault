@@ -785,10 +785,12 @@ function memberName(memberId, members) {
   const m = (members || []).find((m2) => m2.id === memberId);
   return m ? m.name : null;
 }
-function Section({ title, section, items = [], fields, onAdd, onRemove, onEdit, valueKey, readOnly, members }) {
+function Section({ title, section, items = [], fields, onAdd, onRemove, onEdit, onBulkEdit, valueKey, readOnly, members }) {
   const [form, setForm] = useState({});
   const [editing, setEditing] = useState(null);
   const [open, setOpen] = useState(false);
+  const [tableEdits, setTableEdits] = useState({}); // {rowId: {field: value}}
+  const [tableMode, setTableMode] = useState(false);
   const set = (k, v) => setForm((p) => __spreadProps(__spreadValues({}, p), { [k]: v }));
   const submit = () => {
     if (editing) {
@@ -810,6 +812,20 @@ function Section({ title, section, items = [], fields, onAdd, onRemove, onEdit, 
     setEditing(null);
     setForm({});
   };
+  // Table edit helpers
+  const setCell = (rowId, k, v) => setTableEdits(prev => ({
+    ...prev,
+    [rowId]: { ...(prev[rowId] || {}), [k]: v }
+  }));
+  const saveAllTable = () => {
+    const edits = Object.entries(tableEdits).filter(([, patch]) => Object.keys(patch).length > 0);
+    if (edits.length > 0) onBulkEdit(section, edits);
+    setTableEdits({});
+    setTableMode(false);
+  };
+  const cancelTable = () => { setTableEdits({}); setTableMode(false); };
+  const cellVal = (item, k) => tableEdits[item.id]?.[k] !== undefined ? tableEdits[item.id][k] : (item[k] || '');
+  const tableCols = fields.filter(f => f.type !== 'textarea');
   const total = valueKey ? items.reduce((s, i) => s + Number(i[valueKey] || 0), 0) : null;
   return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 } }, total !== null && /* @__PURE__ */ React.createElement("div", { style: { background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 20, padding: "5px 14px", fontSize: 13, color: "var(--text2)" } }, "Total: ", /* @__PURE__ */ React.createElement("strong", { style: { color: "var(--text)" } }, fmt(total))), !readOnly && /* @__PURE__ */ React.createElement(Btn, { variant: "primary", onClick: () => {
     setOpen((o) => !o);
@@ -825,7 +841,73 @@ function Section({ title, section, items = [], fields, onAdd, onRemove, onEdit, 
       onChange: (e) => set(f.k, e.target.value),
       readOnly: false
     }
-  ))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "primary", onClick: submit }, /* @__PURE__ */ React.createElement(Ic, { n: "check", s: 14 }), editing ? "Save Changes" : "Add Entry"), /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: cancel }, "Cancel"))), items.length === 0 ? /* @__PURE__ */ React.createElement(EmptyState, { icon: "info", message: `No ${title.toLowerCase()} yet. Add your first entry.` }) : /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 8 } }, items.map((item) => {
+  ))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, display: "flex", gap: 10 } }, /* @__PURE__ */ React.createElement(Btn, { variant: "primary", onClick: submit }, /* @__PURE__ */ React.createElement(Ic, { n: "check", s: 14 }), editing ? "Save Changes" : "Add Entry"), /* @__PURE__ */ React.createElement(Btn, { variant: "ghost", onClick: cancel }, "Cancel"))), items.length === 0 ? /* @__PURE__ */ React.createElement(EmptyState, { icon: "info", message: `No ${title.toLowerCase()} yet. Add your first entry.` }) :
+  /* @__PURE__ */ React.createElement(React.Fragment, null,
+    /* Table/Card toggle bar */
+    !readOnly && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 12, alignItems: "center" } },
+      /* @__PURE__ */ React.createElement("button", {
+        onClick: () => { setTableMode(false); cancelTable(); },
+        style: { padding: "5px 12px", border: "1px solid var(--border)", borderRadius: 7, background: !tableMode ? "var(--accent)" : "transparent", color: !tableMode ? "#fff" : "var(--text3)", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "var(--font)" }
+      }, "Cards"),
+      /* @__PURE__ */ React.createElement("button", {
+        onClick: () => setTableMode(true),
+        style: { padding: "5px 12px", border: "1px solid var(--border)", borderRadius: 7, background: tableMode ? "var(--accent)" : "transparent", color: tableMode ? "#fff" : "var(--text3)", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "var(--font)" }
+      }, "✏️ Edit Table"),
+      tableMode && /* @__PURE__ */ React.createElement(React.Fragment, null,
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "var(--text3)" } }, "Click any cell to edit"),
+        /* @__PURE__ */ React.createElement("div", { style: { marginLeft: "auto", display: "flex", gap: 8 } },
+          /* @__PURE__ */ React.createElement("button", {
+            onClick: saveAllTable,
+            style: { padding: "5px 14px", background: "var(--green)", color: "#fff", border: "none", borderRadius: 7, cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "var(--font)" }
+          }, "✓ Save All"),
+          /* @__PURE__ */ React.createElement("button", {
+            onClick: cancelTable,
+            style: { padding: "5px 14px", background: "transparent", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 7, cursor: "pointer", fontSize: 12, fontFamily: "var(--font)" }
+          }, "Cancel")
+        )
+      )
+    ),
+    /* TABLE MODE */
+    tableMode ? /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto", borderRadius: "var(--radius)", border: "1px solid var(--border)" } },
+      /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+        /* @__PURE__ */ React.createElement("thead", null,
+          /* @__PURE__ */ React.createElement("tr", { style: { background: "var(--bg2)" } },
+            tableCols.map(f => /* @__PURE__ */ React.createElement("th", { key: f.k, style: { padding: "8px 10px", textAlign: "left", fontSize: 10, color: "var(--text3)", fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" } }, f.l)),
+            /* @__PURE__ */ React.createElement("th", { style: { padding: "8px 10px", borderBottom: "1px solid var(--border)", width: 40 } })
+          )
+        ),
+        /* @__PURE__ */ React.createElement("tbody", null,
+          items.map((item, ri) => /* @__PURE__ */ React.createElement("tr", { key: item.id, style: { background: ri % 2 === 0 ? "var(--bg1)" : "var(--bg2)", borderBottom: "1px solid var(--border)" } },
+            tableCols.map(f => /* @__PURE__ */ React.createElement("td", { key: f.k, style: { padding: "4px 6px" } },
+              f.type === "select" ? /* @__PURE__ */ React.createElement("select", {
+                value: cellVal(item, f.k),
+                onChange: e => setCell(item.id, f.k, e.target.value),
+                style: { background: "var(--bg)", border: "1px solid var(--border2)", borderRadius: 5, padding: "4px 6px", color: "var(--text)", fontSize: 12, fontFamily: "var(--font)", width: "100%" }
+              }, (f.opts || []).map(o => /* @__PURE__ */ React.createElement("option", { key: o, value: o }, o))) :
+              f.type === "member" ? /* @__PURE__ */ React.createElement("select", {
+                value: cellVal(item, f.k),
+                onChange: e => setCell(item.id, f.k, e.target.value),
+                style: { background: "var(--bg)", border: "1px solid var(--border2)", borderRadius: 5, padding: "4px 6px", color: "var(--text)", fontSize: 12, fontFamily: "var(--font)", width: "100%" }
+              }, /* @__PURE__ */ React.createElement("option", { value: "" }, "—"), (members || []).map(m => /* @__PURE__ */ React.createElement("option", { key: m.id, value: m.id }, m.name))) :
+              /* @__PURE__ */ React.createElement("input", {
+                type: f.type || "text",
+                value: cellVal(item, f.k),
+                onChange: e => setCell(item.id, f.k, e.target.value),
+                style: { background: tableEdits[item.id]?.[f.k] !== undefined ? "rgba(61,139,255,.08)" : "transparent", border: tableEdits[item.id]?.[f.k] !== undefined ? "1px solid var(--accent)" : "1px solid transparent", borderRadius: 5, padding: "4px 6px", color: f.k === valueKey ? "var(--green)" : "var(--text)", fontSize: 12, fontFamily: "var(--font)", width: "100%", minWidth: 80 }
+              })
+            )),
+            /* @__PURE__ */ React.createElement("td", { style: { padding: "4px 6px", textAlign: "center" } },
+              /* @__PURE__ */ React.createElement("button", {
+                onClick: () => onRemove(section, item.id),
+                style: { background: "transparent", border: "none", color: "var(--red)", cursor: "pointer", padding: 4 }
+              }, /* @__PURE__ */ React.createElement(Ic, { n: "trash", s: 12 }))
+            )
+          ))
+        )
+      )
+    ) :
+    /* CARD MODE */
+    /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 8 } }, items.map((item) => {
     const memberLabel = memberName(item.memberId, members);
     return /* @__PURE__ */ React.createElement(Card, { key: item.id, style: { padding: "14px 18px" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, memberLabel && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: {
       display: "inline-flex",
@@ -853,7 +935,8 @@ function Section({ title, section, items = [], fields, onAdd, onRemove, onEdit, 
       },
       /* @__PURE__ */ React.createElement(Ic, { n: "trash", s: 13 })
     ))));
-  })));
+  })))
+  );
 }
 function MemberDrillDown({ member, assets, liabilities, insurance, onClose }) {
   var _a, _b;
@@ -1167,6 +1250,466 @@ function Security({ password, onChangePassword, showToast }) {
     "Shared .efo files use a separate password from your vault password"
   ].map((t) => /* @__PURE__ */ React.createElement("li", { key: t, style: { display: "flex", gap: 8, fontSize: 13, color: "var(--text2)", lineHeight: 1.5 } }, /* @__PURE__ */ React.createElement(Ic, { n: "check", s: 13, c: "var(--green)" }), t)))));
 }
+
+// ── Google Drive Integration ──────────────────────────────────────────────────
+// Uses Google Picker API + Drive API v3
+// Config stored in localStorage so user only enters once
+const GDRIVE_CONFIG_KEY = "efo_gdrive_config";
+
+function getGDriveConfig() {
+  try { return JSON.parse(localStorage.getItem(GDRIVE_CONFIG_KEY) || "null"); } catch { return null; }
+}
+function saveGDriveConfig(cfg) {
+  localStorage.setItem(GDRIVE_CONFIG_KEY, JSON.stringify(cfg));
+}
+
+// Load Google Identity Services (OAuth only — no API key, no gapi, no Picker)
+function loadGisScript() {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts) return resolve();
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function getAccessToken(clientId) {
+  await loadGisScript();
+  return new Promise((resolve, reject) => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: "https://www.googleapis.com/auth/drive.file",
+      callback: r => r.error ? reject(new Error(r.error)) : resolve(r.access_token),
+    });
+    client.requestAccessToken({ prompt: "" });
+  });
+}
+
+async function uploadToDrive(filename, content, accessToken) {
+  const metadata = { name: filename, mimeType: "text/plain" };
+  const form = new FormData();
+  form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+  form.append("file", new Blob([content], { type: "text/plain" }));
+  const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error("Drive upload failed: " + res.status);
+  return res.json();
+}
+
+// List .efo files from Drive (no Picker API needed)
+async function listEfoFiles(accessToken) {
+  const q = encodeURIComponent("name contains '.efo' and trashed = false");
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime+desc`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Drive list failed: " + res.status);
+  const json = await res.json();
+  return json.files || [];
+}
+
+async function downloadFromDrive(fileId, accessToken) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Drive download failed: " + res.status);
+  return res.text();
+}
+
+function GoogleDriveModal({ data, password, onClose, showToast, onImport }) {
+  const [cfg, setCfg] = React.useState(() => getGDriveConfig() || { clientId: "" });
+  const [tab, setTab] = React.useState("export");
+  const [busy, setBusy] = React.useState(false);
+  const [status, setStatus] = React.useState("");
+  const [files, setFiles] = React.useState(null); // null = not loaded yet
+
+  const configured = !!cfg.clientId;
+  const saveCfg = () => { saveGDriveConfig(cfg); setTab("export"); showToast("Google Drive configured!"); };
+
+  const doExport = async () => {
+    setBusy(true); setStatus("Encrypting vault…");
+    try {
+      const enc = await encrypt(data, password);
+      setStatus("Signing in to Google…");
+      const token = await getAccessToken(cfg.clientId);
+      setStatus("Uploading to Drive…");
+      const profileName = (data.profile?.name || "Vault").replace(/[^a-zA-Z0-9]/g, "_");
+      const now = new Date();
+      const filename = `${profileName}-${now.toISOString().split("T")[0]}-${now.toTimeString().slice(0,8).replace(/:/g,"-")}-Vault.efo`;
+      await uploadToDrive(filename, enc, token);
+      setStatus("✓ Saved to Google Drive: " + filename);
+      showToast("Uploaded to Google Drive!");
+    } catch(e) {
+      setStatus("✗ Error: " + e.message);
+    } finally { setBusy(false); }
+  };
+
+  const loadFiles = async () => {
+    setBusy(true); setStatus("Signing in to Google…");
+    try {
+      const token = await getAccessToken(cfg.clientId);
+      setStatus("Loading backups…");
+      const list = await listEfoFiles(token);
+      setFiles(list.map(f => ({ ...f, token })));
+      setStatus(list.length === 0 ? "No .efo backups found in your Drive." : "");
+    } catch(e) {
+      setStatus("✗ Error: " + e.message);
+    } finally { setBusy(false); }
+  };
+
+  const doImport = async (file) => {
+    setBusy(true); setStatus("Downloading " + file.name + "…");
+    try {
+      const content = await downloadFromDrive(file.id, file.token);
+      onImport(content);
+      onClose();
+    } catch(e) {
+      setStatus("✗ Error: " + e.message);
+      setBusy(false);
+    }
+  };
+
+  const inputSt = { background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "9px 12px", color: "var(--text)", fontSize: 14, width: "100%" };
+  const tabSt = active => ({ padding: "6px 14px", border: "1px solid var(--border)", borderRadius: 7, background: active ? "var(--accent)" : "transparent", color: active ? "#fff" : "var(--text3)", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "var(--font)" });
+
+  return /* @__PURE__ */ React.createElement(Modal, { title: "Google Drive", onClose },
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18 } },
+      ["export","import","config"].map(t => /* @__PURE__ */ React.createElement("button", { key: t, onClick: () => { setTab(t); setFiles(null); setStatus(""); }, style: tabSt(tab===t) },
+        t === "export" ? "↑ Backup" : t === "import" ? "↓ Restore" : "⚙ Setup"
+      ))
+    ),
+
+    tab === "config" && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 12 } },
+      /* @__PURE__ */ React.createElement("div", { style: { padding: "10px 14px", background: "rgba(61,139,255,.07)", borderRadius: 8, border: "1px solid rgba(61,139,255,.15)", fontSize: 12, color: "var(--text2)", lineHeight: 1.8 } },
+        "1. Go to ", /* @__PURE__ */ React.createElement("strong", null, "console.cloud.google.com"), /* @__PURE__ */ React.createElement("br"),
+        "2. Create project → Enable ", /* @__PURE__ */ React.createElement("strong", null, "Google Drive API"), /* @__PURE__ */ React.createElement("br"),
+        "3. Credentials → OAuth 2.0 Client ID (Web app)", /* @__PURE__ */ React.createElement("br"),
+        "4. Add your domain (or ", /* @__PURE__ */ React.createElement("code", null, "http://localhost"), ") to Authorized JavaScript Origins", /* @__PURE__ */ React.createElement("br"),
+        "5. Paste the Client ID below — no API key needed!"
+      ),
+      /* @__PURE__ */ React.createElement("div", null,
+        /* @__PURE__ */ React.createElement("label", { style: { fontSize: 11, color: "var(--text3)", fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", display: "block", marginBottom: 4 } }, "OAuth Client ID"),
+        /* @__PURE__ */ React.createElement("input", { style: inputSt, value: cfg.clientId, placeholder: "xxx.apps.googleusercontent.com", onChange: e => setCfg({ clientId: e.target.value }) })
+      ),
+      /* @__PURE__ */ React.createElement(Btn, { variant: "primary", onClick: saveCfg }, /* @__PURE__ */ React.createElement(Ic, { n: "check", s: 14 }), "Save")
+    ),
+
+    (tab === "export" || tab === "import") && !configured && /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", padding: 24, color: "var(--text3)" } },
+      /* @__PURE__ */ React.createElement(Ic, { n: "key", s: 28 }),
+      /* @__PURE__ */ React.createElement("p", { style: { marginTop: 10, marginBottom: 14, fontSize: 14 } }, "Add your OAuth Client ID first"),
+      /* @__PURE__ */ React.createElement(Btn, { variant: "primary", onClick: () => setTab("config") }, "Set Up Google Drive")
+    ),
+
+    tab === "export" && configured && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 14 } },
+      /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "var(--text2)", lineHeight: 1.6 } },
+        "Vault is AES-256-GCM encrypted with your vault password, then saved to Google Drive."
+      ),
+      /* @__PURE__ */ React.createElement(Btn, { variant: "primary", onClick: doExport, disabled: busy },
+        busy ? "Working…" : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Ic, { n: "upload", s: 14 }), "Backup to Google Drive")
+      ),
+      status && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: status.startsWith("✓") ? "var(--green)" : status.startsWith("✗") ? "var(--red)" : "var(--text3)", fontFamily: "var(--mono)" } }, status)
+    ),
+
+    tab === "import" && configured && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 12 } },
+      files === null && /* @__PURE__ */ React.createElement(React.Fragment, null,
+        /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "var(--text2)", lineHeight: 1.6 } },
+          "Sign in to Google to see your .efo backups, then click one to restore."
+        ),
+        /* @__PURE__ */ React.createElement(Btn, { variant: "primary", onClick: loadFiles, disabled: busy },
+          busy ? "Loading…" : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Ic, { n: "folder-open", s: 14 }), "Load Backups from Drive")
+        )
+      ),
+      files !== null && files.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: "var(--text3)", textAlign: "center", padding: "16px 0" } }, "No .efo backups found in your Drive."),
+      files !== null && files.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gap: 6 } },
+        files.map(f => /* @__PURE__ */ React.createElement("button", {
+          key: f.id,
+          disabled: busy,
+          onClick: () => doImport(f),
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", textAlign: "left", color: "var(--text)", fontFamily: "var(--font)" }
+        },
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, f.name),
+          /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "var(--text3)" } }, new Date(f.modifiedTime).toLocaleDateString())
+        ))
+      ),
+      status && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12, color: status.startsWith("✗") ? "var(--red)" : "var(--text3)", fontFamily: "var(--mono)", marginTop: 4 } }, status)
+    )
+  );
+}
+
+// ── PDF Report Generation ──────────────────────────────────────────────────────
+
+function loadJsPDF() {
+  return new Promise((resolve, reject) => {
+    if (window.jspdf) return resolve(window.jspdf.jsPDF);
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    s.onload = () => resolve(window.jspdf.jsPDF);
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function generatePDFReport(data) {
+  const JsPDF = await loadJsPDF();
+  const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+  const W = 210, MARGIN = 18, COL = W - MARGIN * 2;
+  const BRAND = [61, 139, 255];
+  const DARK = [20, 24, 40];
+  const GRAY = [110, 118, 140];
+  const LIGHT_BG = [245, 247, 252];
+  const LINE = [220, 224, 235];
+  const GREEN = [34, 197, 94];
+  const RED = [239, 68, 68];
+
+  let y = 0;
+  let page = 1;
+
+  const money = (v) => {
+    if (!v && v !== 0) return "\u2014";
+    const n = typeof v === "string" ? parseFloat(v.replace(/[^0-9.-]/g, "")) : Number(v);
+    if (isNaN(n)) return "\u2014";
+    return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
+  const numVal = (v) => {
+    if (!v && v !== 0) return 0;
+    const n = typeof v === "string" ? parseFloat(v.replace(/[^0-9.-]/g, "")) : Number(v);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const newPage = () => {
+    doc.addPage(); page++; y = 14;
+    doc.setFillColor(...BRAND); doc.rect(0, 0, 210, 6, "F");
+  };
+  const checkY = (needed) => { if (y + needed > 278) newPage(); };
+
+  const sectionHeader = (title) => {
+    checkY(16);
+    doc.setFillColor(...LIGHT_BG);
+    doc.roundedRect(MARGIN, y, COL, 10, 2, 2, "F");
+    doc.setFillColor(...BRAND);
+    doc.roundedRect(MARGIN, y, 4, 10, 1, 1, "F");
+    doc.setFontSize(11); doc.setFont("helvetica", "bold");
+    doc.setTextColor(...BRAND);
+    doc.text(title, MARGIN + 8, y + 6.8);
+    y += 14;
+  };
+
+  const tableRow = (cols, widths, rowY, isHeader, isAlt) => {
+    if (isHeader) {
+      doc.setFillColor(...BRAND); doc.rect(MARGIN, rowY, COL, 7, "F");
+      doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+    } else {
+      if (isAlt) { doc.setFillColor(248, 250, 255); doc.rect(MARGIN, rowY, COL, 7, "F"); }
+      doc.setTextColor(...DARK); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+    }
+    let x = MARGIN + 3;
+    cols.forEach((col, i) => {
+      const align = widths[i] < 0 ? "right" : "left";
+      const w = Math.abs(widths[i]);
+      const lines = doc.splitTextToSize(String(col || "\u2014"), w - 4);
+      doc.text(lines[0], align === "right" ? x + w - 4 : x, rowY + 4.8, { align });
+      x += w;
+    });
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.2);
+    doc.line(MARGIN, rowY + 7, MARGIN + COL, rowY + 7);
+  };
+
+  // Cover page
+  doc.setFillColor(...BRAND); doc.rect(0, 0, 210, 60, "F");
+  doc.setFontSize(28); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
+  doc.text("EFO Vault", MARGIN, 30);
+  doc.setFontSize(12); doc.setFont("helvetica", "normal"); doc.setTextColor(180, 210, 255);
+  doc.text("Estate & Financial Overview Report", MARGIN, 40);
+  doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.3);
+  doc.circle(170, 20, 25, "S"); doc.circle(182, 48, 14, "S");
+
+  y = 75;
+  const profile = data.profile || {};
+  doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(...DARK);
+  doc.text(profile.name || "My Estate Plan", MARGIN, y); y += 10;
+  const details = [profile.dob && ("DOB: " + profile.dob), profile.email, profile.phone].filter(Boolean).join("  \u00B7  ");
+  if (details) {
+    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(...GRAY);
+    doc.text(details, MARGIN, y); y += 7;
+  }
+  doc.setFontSize(9); doc.setTextColor(...GRAY);
+  doc.text("Generated: " + new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), MARGIN, y);
+  y += 10;
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.5); doc.line(MARGIN, y, W - MARGIN, y); y += 10;
+
+  // Net worth cards
+  const assets = data.assets || [];
+  const liabilities = data.liabilities || [];
+  const totalAssets = assets.reduce((s, a) => s + numVal(a.value), 0);
+  const totalLiabilities = liabilities.reduce((s, l) => s + numVal(l.balance || l.value), 0);
+  const netWorth = totalAssets - totalLiabilities;
+  const cardW = (COL - 8) / 3;
+  const cards = [
+    { label: "Total Assets", value: money(totalAssets), color: GREEN },
+    { label: "Total Liabilities", value: money(totalLiabilities), color: RED },
+    { label: "Net Worth", value: money(netWorth), color: netWorth >= 0 ? BRAND : RED },
+  ];
+  cards.forEach((card, i) => {
+    const cx = MARGIN + i * (cardW + 4);
+    doc.setFillColor(...LIGHT_BG); doc.roundedRect(cx, y, cardW, 22, 3, 3, "F");
+    doc.setFillColor(...card.color); doc.roundedRect(cx, y, cardW, 3, 1, 1, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...GRAY);
+    doc.text(card.label.toUpperCase(), cx + cardW / 2, y + 9, { align: "center" });
+    doc.setFontSize(13); doc.setTextColor(...card.color);
+    doc.text(card.value, cx + cardW / 2, y + 17, { align: "center" });
+  });
+  y += 30;
+
+  // Assets
+  if (assets.length > 0) {
+    sectionHeader("Assets");
+    const widths = [38, 24, 34, 18, -22, 38];
+    tableRow(["Name", "Type", "Institution", "Acct #", "Value", "Notes"], widths, y, true);
+    y += 7;
+    assets.forEach((item, idx) => {
+      checkY(8);
+      tableRow([
+        item.name || item.description || "\u2014",
+        item.type || "\u2014",
+        item.institution || "\u2014",
+        item.accountNumber || "\u2014",
+        money(item.value),
+        item.notes || "\u2014",
+      ], widths, y, false, idx % 2 === 1);
+      y += 7;
+    });
+    checkY(8);
+    doc.setFillColor(...BRAND); doc.rect(MARGIN, y, COL, 7, "F");
+    doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+    doc.text("Total Assets", MARGIN + 3, y + 4.8);
+    doc.text(money(totalAssets), MARGIN + COL - 3, y + 4.8, { align: "right" });
+    y += 12;
+  }
+
+  // Liabilities
+  if (liabilities.length > 0) {
+    checkY(20); sectionHeader("Liabilities / Debts");
+    // Header row
+    const hWidths = [38, 24, 34, 18, -22, 38];
+    tableRow(["Name", "Type", "Institution", "Acct #", "Balance", "Notes"], hWidths, y, true);
+    y += 7;
+    liabilities.forEach((item, idx) => {
+      checkY(8);
+      tableRow([
+        item.name || item.description || "\u2014",
+        item.type || "\u2014",
+        item.institution || "\u2014",
+        item.accountNumber || "\u2014",
+        money(item.balance || item.value),
+        item.notes || "\u2014",
+      ], hWidths, y, false, idx % 2 === 1);
+      y += 7;
+    });
+    checkY(8);
+    doc.setFillColor(...RED); doc.rect(MARGIN, y, COL, 7, "F");
+    doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+    doc.text("Total Liabilities", MARGIN + 3, y + 4.8);
+    doc.text(money(totalLiabilities), MARGIN + COL - 3, y + 4.8, { align: "right" });
+    y += 12;
+  }
+
+  // Insurance
+  const insurance = data.insurance || [];
+  if (insurance.length > 0) {
+    checkY(20); sectionHeader("Insurance Policies");
+    const widths = [45, 32, -30, 28, 39];
+    tableRow(["Policy / Provider", "Type", "Coverage", "Insured", "Beneficiary"], widths, y, true);
+    y += 7;
+    insurance.forEach((item, idx) => {
+      checkY(8);
+      tableRow([item.name || item.provider || item.description || "\u2014", item.type || "\u2014", money(item.value || item.coverage || item.amount), item.insured || item.owner || item.member || "\u2014", item.beneficiary || item.beneficiaries || "\u2014"], widths, y, false, idx % 2 === 1);
+      y += 7;
+    });
+    y += 4;
+  }
+
+  // Wills
+  const wills = data.wills || [];
+  if (wills.length > 0) {
+    checkY(20); sectionHeader("Wills & Testaments");
+    const widths = [50, 30, -30, 30, 34];
+    tableRow(["Document Name", "Type", "Date", "Owner", "Location"], widths, y, true);
+    y += 7;
+    wills.forEach((item, idx) => {
+      checkY(8);
+      tableRow([item.name || item.description || "\u2014", item.type || "Will", item.date || item.created || "\u2014", item.owner || item.member || "\u2014", item.location || item.notes || "\u2014"], widths, y, false, idx % 2 === 1);
+      y += 7;
+    });
+    y += 4;
+  }
+
+  // Estate Plans
+  const estate = data.estate || data.estatePlans || [];
+  if (estate.length > 0) {
+    checkY(20); sectionHeader("Estate Plans & Legal Documents");
+    const widths = [50, 35, -30, 30, 29];
+    tableRow(["Document Name", "Type", "Date", "Owner", "Notes"], widths, y, true);
+    y += 7;
+    estate.forEach((item, idx) => {
+      checkY(8);
+      tableRow([item.name || item.description || "\u2014", item.type || "\u2014", item.date || item.created || "\u2014", item.owner || item.member || "\u2014", item.notes || item.location || "\u2014"], widths, y, false, idx % 2 === 1);
+      y += 7;
+    });
+    y += 4;
+  }
+
+  // Notes
+  if (data.notes && data.notes.trim()) {
+    checkY(20); sectionHeader("Notes");
+    doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(...DARK);
+    const noteLines = doc.splitTextToSize(data.notes.trim(), COL - 8);
+    noteLines.forEach(line => { checkY(5); doc.text(line, MARGIN + 4, y); y += 4.5; });
+    y += 6;
+  }
+
+  // Footer on last page
+  checkY(20);
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.5); doc.line(MARGIN, y, W - MARGIN, y); y += 5;
+  doc.setFontSize(8); doc.setFont("helvetica", "italic"); doc.setTextColor(...GRAY);
+  doc.text("This document is confidential. Generated by EFO Vault \u2014 Estate & Financial Overview.", MARGIN, y, { maxWidth: COL });
+  y += 4.5;
+  doc.text("Values shown are for planning purposes only and may not reflect current market values.", MARGIN, y, { maxWidth: COL });
+
+  // Fix all page footers
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(...GRAY);
+    doc.text("EFO Vault \u2014 Estate & Financial Overview", MARGIN, 292);
+    doc.text("Page " + p + " of " + totalPages, W - MARGIN, 292, { align: "right" });
+  }
+
+  return doc;
+}
+
+function PDFReportButton({ data, showToast }) {
+  const [busy, setBusy] = React.useState(false);
+  const handleGenerate = async () => {
+    setBusy(true);
+    try {
+      const doc = await generatePDFReport(data);
+      const safeName = (data.profile && data.profile.name || "Vault").replace(/[^a-zA-Z0-9]/g, "_");
+      const date = new Date().toISOString().split("T")[0];
+      doc.save(safeName + "-" + date + "-Report.pdf");
+      showToast("PDF report downloaded!");
+    } catch(e) { showToast("PDF error: " + e.message, "error"); }
+    finally { setBusy(false); }
+  };
+  return /* @__PURE__ */ React.createElement("button", {
+    onClick: handleGenerate, disabled: busy,
+    style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 7, border: "none", background: "transparent", color: "#f97316", cursor: busy ? "wait" : "pointer", fontSize: 12, fontFamily: "var(--font-head)", opacity: busy ? 0.6 : 1 }
+  }, /* @__PURE__ */ React.createElement(Ic, { n: "file-text", s: 13, c: "#f97316" }), busy ? "Generating\u2026" : "PDF Report");
+}
+
 function ShareModal({ data, password, onClose, showToast }) {
   const [sharePw, setSharePw] = useState("");
   const [confirmPw, setConfirm] = useState("");
@@ -1186,7 +1729,11 @@ function ShareModal({ data, password, onClose, showToast }) {
     const b = new Blob([blob], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(b);
-    a.download = `EFO-Vault-shared-${mode}-${today()}.efo`;
+    const profName = (data.profile?.name || "Vault").replace(/[^a-zA-Z0-9]/g, "_");
+      const shareNow = new Date();
+      const shareDatePart = shareNow.toISOString().split("T")[0];
+      const shareTimePart = shareNow.toTimeString().slice(0,8).replace(/:/g, "-");
+      a.download = `${profName}-${shareDatePart}-${shareTimePart}-Shared-${mode}.efo`;
     a.click();
     showToast("Shared file downloaded!");
   };
@@ -1889,6 +2436,8 @@ function App() {
   const [tab, setTab] = useState("dashboard");
   const [toast, setToast] = useState(null);
   const [showShare, setShowShare] = useState(false);
+  const [showDrive, setShowDrive] = useState(false);
+  const [importContent, setImportContent] = useState(null);
   const [sideOpen, setSideOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("efo_theme");
@@ -1934,6 +2483,12 @@ function App() {
   const addItem = (section, item) => upd(section, [...data[section] || [], __spreadProps(__spreadValues({}, item), { id: uid(), created: today() })]);
   const removeItem = (section, id) => upd(section, data[section].filter((i) => i.id !== id));
   const editItem = (section, id, patch) => upd(section, data[section].map((i) => i.id === id ? __spreadValues(__spreadValues({}, i), patch) : i));
+  const bulkEditItems = (section, edits) => setData((d) => __spreadProps(__spreadValues({}, d), {
+    [section]: d[section].map((item) => {
+      const found = edits.find(([id]) => id === item.id);
+      return found ? __spreadValues(__spreadValues({}, item), found[1]) : item;
+    })
+  }));
   const addDoc = (doc) => upd("documents", [...data.documents || [], __spreadProps(__spreadValues({}, doc), { id: doc.id || uid() })]);
   const removeDoc = (id) => upd("documents", (data.documents || []).filter((d) => d.id !== id));
   const handleExport = async () => {
@@ -1941,7 +2496,11 @@ function App() {
     const b = new Blob([enc], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(b);
-    a.download = `EFO-Vault-backup-${today()}.efo`;
+    const profileName = (data.profile?.name || "Vault").replace(/[^a-zA-Z0-9]/g, "_");
+    const now = new Date();
+    const datePart = now.toISOString().split("T")[0];
+    const timePart = now.toTimeString().slice(0,8).replace(/:/g, "-");
+    a.download = `${profileName}-${datePart}-${timePart}-Vault.efo`;
     a.click();
     showToast("Encrypted backup downloaded!");
   };
@@ -2056,7 +2615,27 @@ function App() {
     },
     /* @__PURE__ */ React.createElement(Ic, { n: "share", s: 13 }),
     "Share with Family"
-  )), /* @__PURE__ */ React.createElement(
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => setShowDrive(true),
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 10px",
+        borderRadius: 7,
+        border: "none",
+        background: "transparent",
+        color: "var(--accent)",
+        cursor: "pointer",
+        fontSize: 12,
+        fontFamily: "var(--font-head)"
+      }
+    },
+    /* @__PURE__ */ React.createElement(Ic, { n: "upload", s: 13, c: "var(--accent)" }),
+    "Google Drive"
+  ), /* @__PURE__ */ React.createElement(PDFReportButton, { data, showToast })), /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: handleLock,
@@ -2078,7 +2657,7 @@ function App() {
     readOnly ? "Close View" : "Lock Vault"
   )));
   const TabContent = () => {
-    const common = { data, onAdd: addItem, onRemove: removeItem, onEdit: editItem, readOnly, members: data.members || [] };
+    const common = { data, onAdd: addItem, onRemove: removeItem, onEdit: editItem, onBulkEdit: bulkEditItems, readOnly, members: data.members || [] };
     if (tab === "dashboard") return /* @__PURE__ */ React.createElement(Dashboard, { data });
     if (tab === "members") return /* @__PURE__ */ React.createElement(Members, __spreadValues({}, common));
     if (tab === "assets") return /* @__PURE__ */ React.createElement(Section, __spreadValues({ title: "Assets", section: "assets", items: data.assets, fields: ASSET_FIELDS, valueKey: "value" }, common));
@@ -2230,7 +2809,11 @@ function App() {
     },
     /* @__PURE__ */ React.createElement(Ic, { n: t.icon, s: 22 }),
     /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, fontWeight: tab === t.id ? 700 : 400 } }, t.label)
-  ))), showShare && !readOnly && /* @__PURE__ */ React.createElement(ShareModal, { data, password, onClose: () => setShowShare(false), showToast }), toast && /* @__PURE__ */ React.createElement(Toast, __spreadValues({}, toast)));
+  ))), showShare && !readOnly && /* @__PURE__ */ React.createElement(ShareModal, { data, password, onClose: () => setShowShare(false), showToast }),
+    showDrive && /* @__PURE__ */ React.createElement(GoogleDriveModal, { data, password, onClose: () => setShowDrive(false), showToast, onImport: (content) => {
+      setImportContent(content);
+      setShowDrive(false);
+    }}), toast && /* @__PURE__ */ React.createElement(Toast, __spreadValues({}, toast)));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(
   React.createElement(App)
